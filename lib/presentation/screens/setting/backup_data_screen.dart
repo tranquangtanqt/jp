@@ -1,0 +1,679 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+import 'package:sliding_up_panel/sliding_up_panel.dart';
+
+import '../../../core/constants/constants.dart';
+import '../../../core/services/backup/backup_service.dart';
+import '../../../core/services/cloud/cloud_sync_service.dart';
+import '../../../core/services/cloud/cloud_sync_target.dart';
+import '../../../core/services/cloud/drive_upload_service.dart';
+import '../../../core/services/database/database_config.dart';
+import '../../../core/services/database/database_service.dart';
+import '../../../core/themes/app_sizes.dart';
+import '../../widgets/app_button.dart';
+import '../../widgets/app_dialog.dart';
+import '../../widgets/app_snack_bar.dart';
+
+class BackupDataScreen extends ConsumerStatefulWidget {
+  const BackupDataScreen({super.key});
+
+  @override
+  ConsumerState<BackupDataScreen> createState() => _BackupDataScreenState();
+}
+
+class _BackupDataScreenState extends ConsumerState<BackupDataScreen> {
+  final panelController = PanelController();
+
+  @override
+  void initState() {
+    super.initState();
+  }
+
+  @override
+  void dispose() {
+    super.dispose();
+  }
+
+  Future<void> _exportDatabaseToTsv(BuildContext context) async {
+    try {
+      final result = await BackupService.exportToLocal();
+
+      if (!mounted) return;
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Đã xuất ${result.fileContents.length} file vào thư mục Download/MeRon/${result.timestamp}',
+          ),
+        ),
+      );
+
+      await _uploadExportToDrive(context, fileContents: result.fileContents, subfolderName: result.timestamp);
+    } catch (e) {
+      if (!mounted) return;
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Xuất file thất bại: $e')),
+      );
+    }
+  }
+
+  Future<void> _uploadExportToDrive(
+    BuildContext context, {
+    required Map<String, String> fileContents,
+    required String subfolderName,
+  }) async {
+    try {
+      final uploadedCount = await DriveUploadService.uploadFiles(
+        files: fileContents,
+        parentFolderId: Constants.driveBackupFolderId,
+        subfolderName: subfolderName,
+      );
+
+      if (!mounted) return;
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Đã tải $uploadedCount file lên Google Drive')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Tải file lên Google Drive thất bại: $e')),
+      );
+    }
+  }
+
+  Future<void> _deleteAllData(BuildContext context) async {
+    try {
+      final db = DatabaseService.instance.database;
+      final tables = <String>[
+        DatabaseConfig.queuedActionTableName,
+        DatabaseConfig.orderItemTableName,
+        DatabaseConfig.transactionTableName,
+        DatabaseConfig.orderTableName,
+        DatabaseConfig.productTableName,
+        DatabaseConfig.userTableName,
+        DatabaseConfig.categoriesTableName,
+        DatabaseConfig.addressTableName,
+        DatabaseConfig.purchaseTableName,
+        DatabaseConfig.purchaseItemTableName,
+      ];
+
+      await db.transaction((txn) async {
+        for (final tableName in tables) {
+          await txn.delete(tableName);
+        }
+      });
+
+      if (!mounted) return;
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Đã xóa toàn bộ dữ liệu khỏi các bảng.')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Xóa dữ liệu thất bại: $e')),
+      );
+    }
+  }
+
+  Future<void> _uploadAllToCloud() async {
+    try {
+      final result = await AppDialog.showProgress(() async {
+        var totalRows = 0;
+
+        for (final target in cloudSyncTargets) {
+          totalRows += await CloudSyncService.uploadTable(
+            tableName: target.tableName,
+            identityColumn: target.identityColumn,
+          );
+        }
+
+        return totalRows;
+      });
+
+      AppSnackBar.show('Đã tải lên $result dòng cho ${cloudSyncTargets.length} bảng');
+    } catch (e) {
+      AppSnackBar.showError('Tải lên đám mây thất bại: $e');
+    }
+  }
+
+  Future<void> _downloadAllFromCloud() async {
+    try {
+      final result = await AppDialog.showProgress(() async {
+        var totalRows = 0;
+
+        for (final target in cloudSyncTargets) {
+          totalRows += await CloudSyncService.downloadTable(
+            tableName: target.tableName,
+            identityColumn: target.identityColumn,
+          );
+        }
+
+        return totalRows;
+      });
+
+      AppSnackBar.show('Đã tải về $result dòng cho ${cloudSyncTargets.length} bảng');
+    } catch (e) {
+      AppSnackBar.showError('Tải về máy thất bại: $e');
+    }
+  }
+
+  Future<void> _deleteAllCloudData() async {
+    try {
+      final result = await AppDialog.showProgress(() async {
+        var totalDeleted = 0;
+
+        for (final target in cloudSyncTargets) {
+          totalDeleted += await CloudSyncService.deleteCloudTable(tableName: target.tableName);
+        }
+
+        return totalDeleted;
+      });
+
+      AppSnackBar.show('Đã xóa $result dòng khỏi ${cloudSyncTargets.length} bảng trên đám mây');
+    } catch (e) {
+      AppSnackBar.showError('Xóa dữ liệu đám mây thất bại: $e');
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Sao lưu dữ liệu')),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(AppSizes.padding),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _ExportButton(onExport: () => _exportDatabaseToTsv(context)),
+            _ImportButton(),
+            _DeleteButton(onDelete: () => _deleteAllData(context)),
+            Padding(
+              padding: const EdgeInsets.only(top: 12),
+            ),
+            Divider(
+              color: Colors.grey,
+              thickness: 1,
+            ),
+            _UploadCloudButton(),
+            _DownloadCloudButton(),
+            _DeleteCloudButton(),
+            Padding(
+              padding: const EdgeInsets.only(top: 12),
+            ),
+            Divider(
+              color: Colors.grey,
+              thickness: 1,
+            ),
+            _UploadAllCloudButton(onUpload: _uploadAllToCloud),
+            _DownloadAllCloudButton(onDownload: _downloadAllFromCloud),
+            _DeleteAllCloudButton(onDelete: _deleteAllCloudData),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ImportButton extends StatelessWidget {
+  const _ImportButton();
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(top: AppSizes.padding),
+      child: AppButton(
+        buttonColor: Theme.of(context).colorScheme.surface,
+        borderColor: Theme.of(context).colorScheme.surfaceContainer,
+        onTap: () {
+          context.go('/setting/backup-data/import');
+        },
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Row(
+              children: [
+                const Icon(
+                  Icons.cloud_download,
+                  size: 18,
+                ),
+                const SizedBox(width: AppSizes.padding / 1.5),
+                Text(
+                  'Nhập dữ liệu từ tệp sao lưu',
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
+            ),
+            const Icon(
+              Icons.arrow_forward_ios_rounded,
+              size: 18,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ExportButton extends StatelessWidget {
+  final VoidCallback onExport;
+
+  const _ExportButton({required this.onExport});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(top: AppSizes.padding),
+      child: AppButton(
+        buttonColor: Theme.of(context).colorScheme.primaryContainer,
+        borderColor: Theme.of(context).colorScheme.primary,
+        onTap: onExport,
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Row(
+              children: [
+                const Icon(
+                  Icons.cloud_upload,
+                  size: 18,
+                ),
+                const SizedBox(width: AppSizes.padding / 1.5),
+                Text(
+                  'Xuất file sao lưu',
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _DeleteButton extends StatelessWidget {
+  final VoidCallback onDelete;
+
+  const _DeleteButton({required this.onDelete});
+
+  Future<void> _showConfirmDialog(BuildContext context) async {
+    final confirmFirst = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Xác nhận xóa dữ liệu'),
+        content: const Text('Bạn có chắc chắn muốn xóa toàn bộ dữ liệu không?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Hủy'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Xóa'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmFirst != true) return;
+
+    if (!context.mounted) return;
+
+    final confirmSecond = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Xác nhận lần thứ 2'),
+        content: const Text(
+          'Hành động này KHÔNG THỂ HOÀN TẠC.\n\n'
+          'Tất cả dữ liệu sẽ bị xóa vĩnh viễn. '
+          'Bạn chắc chắn muốn tiếp tục?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Hủy'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: TextButton.styleFrom(
+              foregroundColor: Colors.red,
+            ),
+            child: const Text('Xóa vĩnh viễn'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmSecond == true && context.mounted) {
+      onDelete();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(top: AppSizes.padding),
+      child: AppButton(
+        buttonColor: Theme.of(context).colorScheme.surface,
+        borderColor: Theme.of(context).colorScheme.surfaceContainer,
+        onTap: () => _showConfirmDialog(context),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Row(
+              children: [
+                const Icon(
+                  Icons.cloud_off,
+                  size: 18,
+                ),
+                const SizedBox(width: AppSizes.padding / 1.5),
+                Text(
+                  'Xóa toàn bộ dữ liệu ở máy',
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _UploadCloudButton extends StatelessWidget {
+  const _UploadCloudButton();
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(top: AppSizes.padding),
+      child: AppButton(
+        buttonColor: Theme.of(context).colorScheme.surface,
+        borderColor: Theme.of(context).colorScheme.surfaceContainer,
+        onTap: () {
+          context.go('/setting/backup-data/upload-cloud');
+        },
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Row(
+              children: [
+                const Icon(
+                  Icons.cloud_upload,
+                  size: 18,
+                ),
+                const SizedBox(width: AppSizes.padding / 1.5),
+                Text(
+                  'Tải lên đám mây',
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
+            ),
+            const Icon(
+              Icons.arrow_forward_ios_rounded,
+              size: 18,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _DownloadCloudButton extends StatelessWidget {
+  const _DownloadCloudButton();
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(top: AppSizes.padding),
+      child: AppButton(
+        buttonColor: Theme.of(context).colorScheme.surface,
+        borderColor: Theme.of(context).colorScheme.surfaceContainer,
+        onTap: () {
+          context.go('/setting/backup-data/download-cloud');
+        },
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Row(
+              children: [
+                const Icon(
+                  Icons.cloud_download,
+                  size: 18,
+                ),
+                const SizedBox(width: AppSizes.padding / 1.5),
+                Text(
+                  'Tải về máy',
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
+            ),
+            const Icon(
+              Icons.arrow_forward_ios_rounded,
+              size: 18,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _DeleteCloudButton extends StatelessWidget {
+  const _DeleteCloudButton();
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(top: AppSizes.padding),
+      child: AppButton(
+        buttonColor: Theme.of(context).colorScheme.surface,
+        borderColor: Theme.of(context).colorScheme.surfaceContainer,
+        onTap: () {
+          context.go('/setting/backup-data/delete-cloud');
+        },
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Row(
+              children: [
+                const Icon(
+                  Icons.cloud_off,
+                  size: 18,
+                ),
+                const SizedBox(width: AppSizes.padding / 1.5),
+                Text(
+                  'Xóa dữ liệu đám mây',
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
+            ),
+            const Icon(
+              Icons.arrow_forward_ios_rounded,
+              size: 18,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _UploadAllCloudButton extends StatelessWidget {
+  final VoidCallback onUpload;
+
+  const _UploadAllCloudButton({required this.onUpload});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(top: AppSizes.padding),
+      child: AppButton(
+        buttonColor: Theme.of(context).colorScheme.primaryContainer,
+        borderColor: Theme.of(context).colorScheme.primary,
+        onTap: onUpload,
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.start,
+          children: [
+            Icon(
+              Icons.cloud_upload,
+              size: 18,
+              color: Theme.of(context).colorScheme.onPrimaryContainer,
+            ),
+            const SizedBox(width: AppSizes.padding / 1.5),
+            Text(
+              'Tải lên đám mây (Toàn bộ)',
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                fontWeight: FontWeight.bold,
+                color: Theme.of(context).colorScheme.onPrimaryContainer,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _DownloadAllCloudButton extends StatelessWidget {
+  final VoidCallback onDownload;
+
+  const _DownloadAllCloudButton({required this.onDownload});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(top: AppSizes.padding),
+      child: AppButton(
+        buttonColor: Theme.of(context).colorScheme.primaryContainer,
+        borderColor: Theme.of(context).colorScheme.primary,
+        onTap: onDownload,
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.start,
+          children: [
+            Icon(
+              Icons.cloud_download,
+              size: 18,
+              color: Theme.of(context).colorScheme.onPrimaryContainer,
+            ),
+            const SizedBox(width: AppSizes.padding / 1.5),
+            Text(
+              'Tải về máy (Toàn bộ)',
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                fontWeight: FontWeight.bold,
+                color: Theme.of(context).colorScheme.onPrimaryContainer,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _DeleteAllCloudButton extends StatelessWidget {
+  final VoidCallback onDelete;
+
+  const _DeleteAllCloudButton({required this.onDelete});
+
+  Future<void> _showConfirmDialog(BuildContext context) async {
+    final confirmFirst = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Xác nhận xóa dữ liệu'),
+        content: const Text('Bạn có chắc chắn muốn xóa TOÀN BỘ dữ liệu trên đám mây không?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Hủy'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Xóa'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmFirst != true) return;
+
+    if (!context.mounted) return;
+
+    final confirmSecond = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Xác nhận lần thứ 2'),
+        content: const Text(
+          'Hành động này KHÔNG THỂ HOÀN TÁC.\n\n'
+          'TOÀN BỘ dữ liệu của tất cả các bảng trên đám mây sẽ bị xóa vĩnh viễn. '
+          'Bạn chắc chắn muốn tiếp tục?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Hủy'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: TextButton.styleFrom(
+              foregroundColor: Colors.red,
+            ),
+            child: const Text('Xóa vĩnh viễn'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmSecond == true && context.mounted) {
+      onDelete();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(top: AppSizes.padding),
+      child: AppButton(
+        buttonColor: Theme.of(context).colorScheme.errorContainer,
+        borderColor: Theme.of(context).colorScheme.error,
+        onTap: () => _showConfirmDialog(context),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.start,
+          children: [
+            Icon(
+              Icons.cloud_off,
+              size: 18,
+              color: Theme.of(context).colorScheme.onErrorContainer,
+            ),
+            const SizedBox(width: AppSizes.padding / 1.5),
+            Text(
+              'Xóa dữ liệu đám mây (Toàn bộ)',
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                fontWeight: FontWeight.bold,
+                color: Theme.of(context).colorScheme.onErrorContainer,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}

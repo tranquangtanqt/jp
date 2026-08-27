@@ -1,0 +1,93 @@
+import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../core/constants/constants.dart';
+import '../../core/services/logger/error_logger_service.dart';
+import '../../presentation/widgets/app_error_widget.dart';
+import '../di/app_providers.dart';
+import '../routes/app_routes.dart';
+import '../routes/params/error_screen_param.dart';
+
+class ErrorHandlerBuilder extends ConsumerStatefulWidget {
+  final Widget? child;
+
+  const ErrorHandlerBuilder({
+    super.key,
+    this.child,
+  });
+
+  @override
+  ErrorHandlerBuilderState createState() => ErrorHandlerBuilderState();
+}
+
+class ErrorHandlerBuilderState extends ConsumerState<ErrorHandlerBuilder> {
+  // ErrorLoggerService get _errorLoggerService => ref.read(errorLoggerServiceProvider);	TODO comment
+  AppRoutes get _appRoutes => ref.read(appRoutesProvider);
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      // Set up custom widget error
+      ErrorWidget.builder = (error) => AppErrorWidget(error: error, textOnly: true);
+
+      // Called whenever the Flutter framework catches an error
+      FlutterError.onError = onFlutterError;
+
+      // Pass all uncaught asynchronous errors that aren't handled by the Flutter framework to Crashlytics
+      PlatformDispatcher.instance.onError = onPlatformError;
+    });
+  }
+
+  // Flutter error handling logic
+  void onFlutterError(FlutterErrorDetails flutterError) {
+    debugPrint('========== Flutter Error ==========');
+    debugPrint(flutterError.exceptionAsString());
+    debugPrint(flutterError.stack?.toString());
+
+    //_errorLoggerService.log(error: flutterError.exception, stackTrace: flutterError.stack); TODO comment
+
+    if (!mounted) return;
+
+    // Skip navigation to error screen for non-critical errors
+    final library = flutterError.library?.toLowerCase() ?? '';
+    if (Constants.nonCriticalErrorLibraries.any((lib) => library.contains(lib))) {
+      return;
+    }
+
+    // Prevent to push to ErrorScreen multiple times
+    if (_appRoutes.router.routeInformationProvider.value.uri.path != '/error') {
+      _appRoutes.router.go('/error', extra: ErrorScreenParam(flutterError: flutterError));
+    }
+  }
+
+  // Platform error handling logic
+  bool onPlatformError(Object error, StackTrace stackTrace) {
+    debugPrint('========== Platform Error ==========');
+    debugPrint(error.toString());
+    debugPrint(stackTrace.toString());
+
+    // _errorLoggerService.log(error: error, stackTrace: stackTrace);	TODO comment
+
+    if (!mounted) return false;
+
+    // Prevent to push to ErrorScreen multiple times
+    if (_appRoutes.router.routeInformationProvider.value.uri.path != '/error') {
+      _appRoutes.router.go(
+        '/error',
+        extra: ErrorScreenParam(error: error, stackTrace: stackTrace),
+      );
+    }
+
+    return true;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      top: false,
+      child: widget.child ?? const SizedBox.shrink(),
+    );
+  }
+}
