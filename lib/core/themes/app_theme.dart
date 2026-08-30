@@ -12,9 +12,9 @@ class AppTheme {
 
   AppTheme._();
 
-  Color _primaryColor = AppColors.orange;
+  Color _primaryColor = AppColors.blue;
   Color? _secondaryColor = AppColors.charcoal;
-  Color? _tertiaryColor = AppColors.plum;
+  Color? _tertiaryColor = AppColors.zamp;
   Brightness _brightness = Brightness.light;
   TextTheme _primaryTextTheme = GoogleFonts.latoTextTheme();
   TextTheme _secondaryTextTheme = GoogleFonts.poppinsTextTheme();

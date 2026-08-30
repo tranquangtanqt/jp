@@ -44,69 +44,32 @@ class DatabaseService {
     );
   }
 
-  // Create tables
   Future<void> _createTables(Database db) async {
     await Future.wait([
-      db.execute(DatabaseConfig.createAddressTable),
-      db.execute(DatabaseConfig.createCategoryTable),
-      db.execute(DatabaseConfig.createUserTable),
-      db.execute(DatabaseConfig.createProductTable),
-      db.execute(DatabaseConfig.createOrderTable),
-      db.execute(DatabaseConfig.createOrderItemTable),
-      db.execute(DatabaseConfig.createPurchaseTable),
-      db.execute(DatabaseConfig.createPurchaseItemTable),
-      db.execute(DatabaseConfig.createTransactionTable),
-      db.execute(DatabaseConfig.createQueuedActionTable),
+      db.execute(DatabaseConfig.createLearningProgressTable),
+      db.execute(DatabaseConfig.createExamProgressTable),
     ]);
-
-    await _seedData(db);
   }
 
-  Future<void> _upgradeDatabase(
-      Database db,
-      int oldVersion,
-      int newVersion,
-      ) async {
-    if (oldVersion < 2) {
-      await db.execute(DatabaseConfig.createPurchaseTable);
-      await db.execute(DatabaseConfig.createPurchaseItemTable);
-    }
-
-    // future version
-    // if (oldVersion < 3) { ... }
+  Future<void> _upgradeDatabase(Database db, int oldVersion, int newVersion) async {
+    // future migrations
+    // if (oldVersion < 2) { ... }
   }
 
   @visibleForTesting
   Future<void> initTestDatabase({required Database testDatabase}) async {
     database = testDatabase;
 
-    // Create tables
     await Future.wait([
-      database.execute(DatabaseConfig.createUserTable),
-      database.execute(DatabaseConfig.createProductTable),
-      database.execute(DatabaseConfig.createOrderTable),
-      database.execute(DatabaseConfig.createTransactionTable),
-      database.execute(DatabaseConfig.createQueuedActionTable),
-    ]);
-  }
-
-  Future<void> _seedData(Database db) async {
-    await Future.wait([
-      db.execute(DatabaseConfig.insertAddressTable),
-      db.execute(DatabaseConfig.insertCategoriesTable),
-      db.execute(DatabaseConfig.insertProductTable),
-      db.execute(DatabaseConfig.insertUserTable),
-      db.execute(DatabaseConfig.insertOrderTable),
-      db.execute(DatabaseConfig.insertOrderItemTable),
+      database.execute(DatabaseConfig.createLearningProgressTable),
+      database.execute(DatabaseConfig.createExamProgressTable),
     ]);
   }
 
   Future<void> dropDatabase(String path) async {
-    // Check if the database file exists
     File databaseFile = File(path);
 
     if (await databaseFile.exists()) {
-      // Delete the database file
       await databaseFile.delete();
 
       cw('Database deleted successfully!');

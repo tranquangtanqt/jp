@@ -16,7 +16,7 @@ class App extends ConsumerWidget {
     final router = ref.watch(appRoutesProvider).router;
 
     return MaterialApp.router(
-      title: 'Mẹ Rôn',
+      title: 'Học tiếng Nhật N5',
       theme: theme,
       debugShowCheckedModeBanner: kDebugMode,
       routerConfig: router,
