@@ -39,11 +39,12 @@ class ExamQuizNotifier extends AutoDisposeFamilyNotifier<ExamQuizState, ExamQuiz
     final types = _all.map((q) => q.type).toSet();
 
     final examProgress = await GetExamProgressUsecase(ref.read(progressRepositoryProvider)).call(_lesson);
+    final progress = await GetProgressUsecase(
+      ref.read(progressRepositoryProvider),
+    ).call((feature: ProgressFeature.exam, scope: _scope));
+    final mastered = progress.data?.masteredIds ?? <String>{};
 
     if (arg.mistakeMode) {
-      final progress = await GetProgressUsecase(
-        ref.read(progressRepositoryProvider),
-      ).call((feature: ProgressFeature.exam, scope: _scope));
       final mistakeIds = progress.data?.mistakeIds ?? <String>{};
       final pool = _all.where((q) => mistakeIds.contains(q.id.toString())).toList();
 
@@ -58,6 +59,8 @@ class ExamQuizNotifier extends AutoDisposeFamilyNotifier<ExamQuizState, ExamQuiz
         phase: ExamQuizPhase.playing,
         availableTypes: types,
         questions: _build(pool, pool.length),
+        pool: pool,
+        masteredIds: mastered,
         bestCorrect: examProgress.data?.correct ?? 0,
         bestTotal: examProgress.data?.total ?? 0,
       );
@@ -68,6 +71,7 @@ class ExamQuizNotifier extends AutoDisposeFamilyNotifier<ExamQuizState, ExamQuiz
     state = state.copyWith(
       isLoading: false,
       availableTypes: types,
+      masteredIds: mastered,
       bestCorrect: examProgress.data?.correct ?? 0,
       bestTotal: examProgress.data?.total ?? 0,
     );
@@ -81,8 +85,14 @@ class ExamQuizNotifier extends AutoDisposeFamilyNotifier<ExamQuizState, ExamQuiz
 
   void setCount(int value) => state = state.copyWith(questionCount: value);
 
+  void toggleOnlyNotDone() => state = state.copyWith(onlyNotDone: !state.onlyNotDone);
+
   void start() {
-    final filtered = state.typeFilter.isEmpty ? _all : _all.where((q) => state.typeFilter.contains(q.type)).toList();
+    var filtered = state.typeFilter.isEmpty ? _all : _all.where((q) => state.typeFilter.contains(q.type)).toList();
+
+    if (state.onlyNotDone) {
+      filtered = filtered.where((q) => !state.masteredIds.contains(q.id.toString())).toList();
+    }
 
     if (filtered.isEmpty) {
       state = state.copyWith(error: 'Không có câu hỏi phù hợp bộ lọc.');
@@ -93,10 +103,12 @@ class ExamQuizNotifier extends AutoDisposeFamilyNotifier<ExamQuizState, ExamQuiz
     state = state.copyWith(
       phase: ExamQuizPhase.playing,
       questions: _build(filtered, state.questionCount),
+      pool: filtered,
       currentIndex: 0,
       isAnswered: false,
       clearSelected: true,
       correctCount: 0,
+      wrongCount: 0,
       clearError: true,
     );
   }
@@ -112,14 +124,20 @@ class ExamQuizNotifier extends AutoDisposeFamilyNotifier<ExamQuizState, ExamQuiz
       isAnswered: true,
       selectedIndex: index,
       correctCount: correct ? state.correctCount + 1 : state.correctCount,
+      wrongCount: correct ? state.wrongCount : state.wrongCount + 1,
     );
 
-    await RecordAnswerUsecase(ref.read(progressRepositoryProvider)).call((
-      feature: ProgressFeature.exam,
-      scope: _scope,
-      itemId: question.source.id.toString(),
-      correct: correct,
-    ));
+    final progressRepo = ref.read(progressRepositoryProvider);
+    final itemId = question.source.id.toString();
+
+    if (correct) {
+      await RecordMasteredUsecase(progressRepo).call((feature: ProgressFeature.exam, scope: _scope, itemId: itemId));
+      state = state.copyWith(masteredIds: {...state.masteredIds, itemId});
+    }
+
+    await RecordAnswerUsecase(
+      progressRepo,
+    ).call((feature: ProgressFeature.exam, scope: _scope, itemId: itemId, correct: correct));
   }
 
   Future<void> next() async {

@@ -28,10 +28,18 @@ class ExamQuizPlayView extends ConsumerWidget {
       children: [
         LinearProgressIndicator(value: (state.currentIndex + 1) / state.questions.length),
         const SizedBox(height: 8),
-        Text(
-          'Câu ${state.currentIndex + 1}/${state.questions.length}  ·  Đúng ${state.correctCount}'
-          '  ·  ${typeLabels[source.type] ?? source.type}',
-          style: theme.textTheme.bodySmall,
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Expanded(
+              child: Text(
+                'Câu ${state.currentIndex + 1}/${state.questions.length}  ·  Đúng ${state.correctCount}'
+                '  ·  Sai ${state.wrongCount}  ·  ${typeLabels[source.type] ?? source.type}',
+                style: theme.textTheme.bodySmall,
+              ),
+            ),
+            Text('Đã làm ${state.scopeMastered}/${state.pool.length}', style: theme.textTheme.bodySmall),
+          ],
         ),
         const SizedBox(height: 12),
         if (source.passage != null && source.passage!.isNotEmpty)

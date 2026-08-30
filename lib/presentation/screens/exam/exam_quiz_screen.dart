@@ -80,14 +80,6 @@ class _SetupView extends ConsumerWidget {
     return ListView(
       padding: const EdgeInsets.all(AppSizes.padding),
       children: [
-        if (state.bestTotal > 0)
-          Card(
-            child: ListTile(
-              leading: const Icon(Icons.emoji_events_outlined),
-              title: Text('Kết quả tốt nhất: ${state.bestCorrect}/${state.bestTotal}'),
-            ),
-          ),
-        const SizedBox(height: 8),
         DropdownButtonFormField<int>(
           initialValue: state.questionCount,
           decoration: const InputDecoration(labelText: 'Số câu hỏi', border: OutlineInputBorder(), isDense: true),
@@ -107,6 +99,13 @@ class _SetupView extends ConsumerWidget {
                 onSelected: (_) => notifier.toggleType(type),
               ),
           ],
+        ),
+        CheckboxListTile(
+          contentPadding: EdgeInsets.zero,
+          controlAffinity: ListTileControlAffinity.leading,
+          title: const Text('Chỉ làm câu chưa làm'),
+          value: state.onlyNotDone,
+          onChanged: (_) => notifier.toggleOnlyNotDone(),
         ),
         const SizedBox(height: AppSizes.padding),
         FilledButton(onPressed: notifier.start, child: const Text('Làm bài')),
