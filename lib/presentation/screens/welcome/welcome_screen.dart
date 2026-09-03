@@ -1,42 +1,33 @@
-import 'package:app_image/app_image.dart';
 import 'package:flutter/material.dart';
 
 import '../../../core/assets/assets.dart';
 import '../../../core/themes/app_sizes.dart';
 
-class WelcomeScreen extends StatefulWidget {
+class WelcomeScreen extends StatelessWidget {
   const WelcomeScreen({super.key});
 
   @override
-  State<WelcomeScreen> createState() => _WelcomeScreenState();
-}
-
-class _WelcomeScreenState extends State<WelcomeScreen> {
-  @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Center(child: body()),
+      body: Center(child: _body(context)),
     );
   }
 
-  Widget body() {
+  Widget _body(BuildContext context) {
     return Container(
       constraints: const BoxConstraints(maxWidth: 270),
       padding: const EdgeInsets.all(AppSizes.padding),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const AppImage(
-            image: Assets.welcome,
-            imgProvider: ImgProvider.assetImage,
-          ),
+          Image.asset(Assets.welcome, width: 160, errorBuilder: (_, _, _) => const SizedBox.shrink()),
           const SizedBox(height: AppSizes.padding),
           Text(
             'Chào mừng!',
             style: Theme.of(context).textTheme.displaySmall?.copyWith(fontWeight: FontWeight.bold),
           ),
           Text(
-            'Chào mừng đến với Mẹ Rôn',
+            'Học tiếng Nhật JLPT N5',
             textAlign: TextAlign.center,
             style: Theme.of(context).textTheme.bodyLarge,
           ),

@@ -1,591 +1,153 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../presentation/providers/auth/auth_notifier.dart';
-import '../../presentation/screens/main/cate_screen.dart';
-import '../../presentation/screens/setting/about_screen.dart';
-import '../../presentation/screens/address/address_form_screen.dart';
-import '../../presentation/screens/address/address_screen.dart';
-import '../../presentation/screens/category/category_form_screen.dart';
-import '../../presentation/screens/category/category_screen.dart';
-import '../../presentation/screens/setting/backup_data_screen.dart';
-import '../../presentation/screens/setting/delete_cloud_screen.dart';
-import '../../presentation/screens/setting/download_cloud_screen.dart';
-import '../../presentation/screens/setting/import_data_screen.dart';
-import '../../presentation/screens/setting/setting_screen.dart';
-import '../../presentation/screens/setting/printer_settings_screen.dart';
-import '../../presentation/screens/setting/profile_form_screen.dart';
 import '../../presentation/screens/error/error_screen.dart';
+import '../../presentation/screens/exam/exam_lessons_screen.dart';
+import '../../presentation/screens/exam/exam_quiz_screen.dart';
 import '../../presentation/screens/home/home_screen.dart';
+import '../../presentation/screens/kanji/kanji_categories_screen.dart';
+import '../../presentation/screens/kanji/kanji_detail_screen.dart';
+import '../../presentation/screens/kanji/kanji_quiz_screen.dart';
 import '../../presentation/screens/main/main_screen.dart';
-import '../../presentation/screens/order/order_detail_screen.dart';
-import '../../presentation/screens/order/order_form_screen.dart';
-import '../../presentation/screens/order/order_screen.dart';
-import '../../presentation/screens/products/product_form_screen.dart';
-import '../../presentation/screens/products/products_screen.dart';
-import '../../presentation/screens/purchase/purchase_form_screen.dart';
-import '../../presentation/screens/purchase/purchase_screen.dart';
-import '../../presentation/screens/report/report_customer_screen.dart';
-import '../../presentation/screens/report/report_order_screen.dart';
-import '../../presentation/screens/setting/upload_cloud_screen.dart';
-import '../../presentation/screens/transactions/transaction_detail_screen.dart';
-import '../../presentation/screens/transactions/transactions_screen.dart';
-import '../../presentation/screens/user/user_form_screen.dart';
-import '../../presentation/screens/user/user_screen.dart';
+import '../../presentation/screens/setting/about_screen.dart';
+import '../../presentation/screens/setting/setting_screen.dart';
+import '../../presentation/screens/vocabulary/vocabulary_detail_screen.dart';
+import '../../presentation/screens/vocabulary/vocabulary_levels_screen.dart';
+import '../../presentation/screens/vocabulary/vocabulary_quiz_screen.dart';
 import '../../presentation/screens/welcome/welcome_screen.dart';
-import '../../presentation/screens/report/report_product_screen.dart';
-import '../../presentation/screens/report/report_screen.dart';
-import '../../presentation/screens/report/report_summary_screen.dart';
 import 'params/error_screen_param.dart';
-import 'params/order_detail_param.dart';
 
 /// Route paths
 class AppRouteConst {
-  static const login = '/login';
-  static const home = '/home';
   static const splash = '/';
+  static const home = '/home';
+  static const vocabulary = '/vocabulary';
+  static const kanji = '/kanji';
+  static const exam = '/exam';
+  static const setting = '/setting';
 }
-
-final GlobalKey<NavigatorState> _rootNavigatorKey = GlobalKey<NavigatorState>();
-
-final GlobalKey<NavigatorState> _shellNavigatorKey = GlobalKey<NavigatorState>();
 
 /// App routes
 class AppRoutes {
-  final Ref _ref;
-
-  AppRoutes(this._ref) {
-    _initialize();
-  }
+  AppRoutes();
 
   static final rootNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'root');
   static final navNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'nav');
 
   GoRouter? _router;
+
   GoRouter get router {
-    if (_router == null) _initialize();
+    _router ??= _initialize();
     return _router!;
   }
 
-  void _initialize() {
-    final authNotifier = _ref.read(authNotifierProvider);
-    final authStateNotifier = ValueNotifier(authNotifier);
-
-    // Dispose the notifier when the provider is disposed
-    _ref.onDispose(authStateNotifier.dispose);
-
-    // Listen to the auth state and update the ValueNotifier
-    _ref.listen(authNotifierProvider, (_, value) => authStateNotifier.value = value);
-
-    _router = GoRouter(
+  GoRouter _initialize() {
+    return GoRouter(
       initialLocation: AppRouteConst.splash,
       navigatorKey: rootNavigatorKey,
-      refreshListenable: authStateNotifier,
       errorBuilder: (context, state) => ErrorScreen(param: ErrorScreenParam(error: state.error)),
       redirect: (context, state) {
-        final location = state.uri.toString();
-        if (location == AppRouteConst.splash) {
+        if (state.uri.toString() == AppRouteConst.splash) {
           return AppRouteConst.home;
         }
+
         return null;
       },
       routes: [
-        _splash(),
+        GoRoute(
+          path: AppRouteConst.splash,
+          builder: (context, state) => const WelcomeScreen(),
+        ),
+        GoRoute(
+          path: '/error',
+          builder: (context, state) {
+            final param = state.extra is ErrorScreenParam ? state.extra as ErrorScreenParam : ErrorScreenParam();
+
+            return ErrorScreen(param: param);
+          },
+        ),
         _main(),
-        _error(),
       ],
-    );
-  }
-
-  GoRoute _splash() {
-    return GoRoute(
-      path: '/',
-      builder: (context, state) => const WelcomeScreen(),
-    );
-  }
-
-  GoRoute _error() {
-    return GoRoute(
-      path: '/error',
-      builder: (context, state) {
-        if (state.extra == null || state.extra! is! ErrorScreenParam) {
-          throw 'Required ErrorScreenParam is not provided!';
-        }
-
-        return ErrorScreen(param: state.extra as ErrorScreenParam);
-      },
     );
   }
 
   ShellRoute _main() {
     return ShellRoute(
       navigatorKey: navNavigatorKey,
-      builder: (BuildContext context, GoRouterState state, Widget child) {
-        return MainScreen(child: child);
-      },
+      builder: (context, state, child) => MainScreen(child: child),
       routes: [
-        _home(),
-        _product(),
-        _transactions(),
-        _setting(),
-        _address(),
-        _category(),
-        _cate(),
-        _user(),
-        _order(),
-        _report(),
-        _purchase(),
+        GoRoute(
+          path: AppRouteConst.home,
+          pageBuilder: (context, state) => const NoTransitionPage<void>(child: HomeScreen()),
+        ),
+        GoRoute(
+          path: AppRouteConst.vocabulary,
+          pageBuilder: (context, state) => const NoTransitionPage<void>(child: VocabularyLevelsScreen()),
+          routes: [
+            GoRoute(
+              path: ':level',
+              parentNavigatorKey: rootNavigatorKey,
+              builder: (context, state) => VocabularyDetailScreen(level: state.pathParameters['level']!),
+              routes: [
+                GoRoute(
+                  path: 'quiz',
+                  parentNavigatorKey: rootNavigatorKey,
+                  builder: (context, state) => VocabularyQuizScreen(
+                    level: state.pathParameters['level']!,
+                    mistakeMode: state.uri.queryParameters['mode'] == 'mistakes',
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+        GoRoute(
+          path: AppRouteConst.kanji,
+          pageBuilder: (context, state) => const NoTransitionPage<void>(child: KanjiCategoriesScreen()),
+          routes: [
+            GoRoute(
+              path: ':categoryId',
+              parentNavigatorKey: rootNavigatorKey,
+              builder: (context, state) => KanjiDetailScreen(categoryId: state.pathParameters['categoryId']!),
+              routes: [
+                GoRoute(
+                  path: 'quiz',
+                  parentNavigatorKey: rootNavigatorKey,
+                  builder: (context, state) => KanjiQuizScreen(
+                    categoryId: state.pathParameters['categoryId']!,
+                    mistakeMode: state.uri.queryParameters['mode'] == 'mistakes',
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+        GoRoute(
+          path: AppRouteConst.exam,
+          pageBuilder: (context, state) => const NoTransitionPage<void>(child: ExamLessonsScreen()),
+          routes: [
+            GoRoute(
+              path: ':lesson/quiz',
+              parentNavigatorKey: rootNavigatorKey,
+              builder: (context, state) => ExamQuizScreen(
+                lesson: int.parse(state.pathParameters['lesson']!),
+                mistakeMode: state.uri.queryParameters['mode'] == 'mistakes',
+              ),
+            ),
+          ],
+        ),
+        GoRoute(
+          path: AppRouteConst.setting,
+          pageBuilder: (context, state) => const NoTransitionPage<void>(child: SettingScreen()),
+          routes: [
+            GoRoute(
+              path: 'about',
+              parentNavigatorKey: rootNavigatorKey,
+              builder: (context, state) => const AboutScreen(),
+            ),
+          ],
+        ),
       ],
-    );
-  }
-
-  GoRoute _home() {
-    return GoRoute(
-      path: '/home',
-      pageBuilder: (context, state) {
-        return const NoTransitionPage<void>(
-          child: HomeScreen(),
-        );
-      },
-    );
-  }
-
-  GoRoute _product() {
-    return GoRoute(
-      path: '/product',
-      pageBuilder: (context, state) {
-        return const NoTransitionPage<void>(
-          child: ProductsScreen(),
-        );
-      },
-      routes: [
-        _productCreate(),
-        _productEdit(),
-      ],
-    );
-  }
-
-  GoRoute _transactions() {
-    return GoRoute(
-      path: '/transactions',
-      pageBuilder: (context, state) {
-        return const NoTransitionPage<void>(
-          child: TransactionsScreen(),
-        );
-      },
-      routes: [
-        _transactionDetail(),
-      ],
-    );
-  }
-
-  GoRoute _address() {
-    return GoRoute(
-      path: '/address',
-      pageBuilder: (context, state) {
-        return const NoTransitionPage<void>(
-          child: AddressScreen(),
-        );
-      },
-      routes: [
-        _addressCreate(),
-        _addressEdit(),
-      ],
-    );
-  }
-
-  GoRoute _category() {
-    return GoRoute(
-      path: '/category',
-      pageBuilder: (context, state) {
-        return const NoTransitionPage<void>(
-          child: CategoryScreen(),
-        );
-      },
-      routes: [
-        _categoryCreate(),
-        _categoryEdit(),
-      ],
-    );
-  }
-
-  GoRoute _cate() {
-    return GoRoute(
-      path: '/cate',
-      pageBuilder: (context, state) {
-        return const NoTransitionPage<void>(
-          child: CateScreen(),
-        );
-      },
-      routes: [],
-    );
-  }
-
-  GoRoute _user() {
-    return GoRoute(
-      path: '/user',
-      pageBuilder: (context, state) {
-        return const NoTransitionPage<void>(
-          child: UserScreen(),
-        );
-      },
-      routes: [
-        _userCreate(),
-        _userEdit(),
-      ],
-    );
-  }
-
-  GoRoute _order() {
-    return GoRoute(
-      path: '/order',
-      pageBuilder: (context, state) {
-        return const NoTransitionPage<void>(
-          child: OrderScreen(),
-        );
-      },
-      routes: [
-        _orderCreate(),
-        _orderEdit(),
-        _orderDetail(),
-      ],
-    );
-  }
-
-  GoRoute _report() {
-    return GoRoute(
-      path: '/report',
-      pageBuilder: (context, state) {
-        return const NoTransitionPage<void>(
-          child: ReportScreen(),
-        );
-      },
-      routes: [
-        _reportOrder(),
-        _reportProduct(),
-        _reportSummary(),
-        _reportCustomer(),
-      ],
-    );
-  }
-
-  GoRoute _purchase() {
-    return GoRoute(
-      path: '/purchase',
-      pageBuilder: (context, state) {
-        return const NoTransitionPage<void>(
-          child: PurchaseScreen(),
-        );
-      },
-      routes: [
-        _purchaseCreate(),
-        _purchaseEdit(),
-      ],
-    );
-  }
-
-  GoRoute _setting() {
-    return GoRoute(
-      path: '/setting',
-      pageBuilder: (context, state) {
-        return const NoTransitionPage<void>(
-          child: SettingScreen(),
-        );
-      },
-      routes: [
-        _backupData(),
-        _about(),
-        _printerSettings(),
-      ],
-    );
-  }
-
-  GoRoute _productCreate() {
-    return GoRoute(
-      path: 'product-create',
-      parentNavigatorKey: navNavigatorKey,
-      builder: (context, state) {
-        return const ProductFormScreen();
-      },
-    );
-  }
-
-  GoRoute _productEdit() {
-    return GoRoute(
-      path: 'product-edit/:id',
-      builder: (context, state) {
-        int? id = int.tryParse(state.pathParameters["id"] ?? '');
-
-        if (id == null) {
-          throw 'Required productId is not provided!';
-        }
-
-        return ProductFormScreen(id: id);
-      },
-    );
-  }
-
-  GoRoute _orderCreate() {
-    return GoRoute(
-      path: 'order-create',
-      parentNavigatorKey: navNavigatorKey,
-      builder: (context, state) {
-        return const OrderFormScreen();
-      },
-    );
-  }
-
-  GoRoute _reportOrder() {
-    return GoRoute(
-      path: 'report-order',
-      builder: (context, state) {
-        return ReportOrderScreen();
-      },
-    );
-  }
-
-  GoRoute _reportProduct() {
-    return GoRoute(
-      path: 'report-product',
-      builder: (context, state) {
-        return ReportProductScreen();
-      },
-    );
-  }
-
-  GoRoute _reportSummary() {
-    return GoRoute(
-      path: 'report-summary',
-      builder: (context, state) {
-        return const ReportSummaryScreen();
-      },
-    );
-  }
-
-  GoRoute _reportCustomer() {
-    return GoRoute(
-      path: 'report-customer',
-      builder: (context, state) {
-        return const ReportCustomerScreen();
-      },
-    );
-  }
-
-  GoRoute _orderEdit() {
-    return GoRoute(
-      path: 'order-edit/:id',
-      builder: (context, state) {
-        int? id = int.tryParse(state.pathParameters["id"] ?? '');
-
-        if (id == null) {
-          throw 'Required productId is not provided!';
-        }
-
-        return OrderFormScreen(id: id);
-      },
-    );
-  }
-
-  GoRoute _orderDetail() {
-    return GoRoute(
-      path: 'order-detail',
-      parentNavigatorKey: navNavigatorKey,
-      builder: (context, state) {
-        final param = state.extra is OrderDetailParam ? state.extra as OrderDetailParam : null;
-
-        return OrderDetailScreen(param: param);
-      },
-    );
-  }
-
-  GoRoute _backupData() {
-    return GoRoute(
-      path: 'backup-data',
-      builder: (context, state) {
-        return BackupDataScreen();
-      },
-      routes: [
-        _importData(),
-        _uploadData(),
-        _downloadData(),
-        _deleteData(),
-      ],
-    );
-  }
-
-  GoRoute _importData() {
-    return GoRoute(
-      path: 'import',
-      builder: (context, state) {
-        return const ImportDataScreen();
-      },
-    );
-  }
-
-  GoRoute _uploadData() {
-    return GoRoute(
-      path: 'upload-cloud',
-      builder: (context, state) {
-        return const UploadCloudScreen();
-      },
-    );
-  }
-
-  GoRoute _downloadData() {
-    return GoRoute(
-      path: 'download-cloud',
-      builder: (context, state) {
-        return const DownloadCloudScreen();
-      },
-    );
-  }
-
-  GoRoute _deleteData() {
-    return GoRoute(
-      path: 'delete-cloud',
-      builder: (context, state) {
-        return const DeleteCloudScreen();
-      },
-    );
-  }
-
-  GoRoute _transactionDetail() {
-    return GoRoute(
-      path: 'transaction-detail/:id',
-      builder: (context, state) {
-        int? id = int.tryParse(state.pathParameters["id"] ?? '');
-
-        if (id == null) {
-          throw 'Required productId is not provided!';
-        }
-
-        return TransactionDetailScreen(id: id);
-      },
-    );
-  }
-
-  GoRoute _profileEdit() {
-    return GoRoute(
-      path: 'profile',
-      builder: (context, state) {
-        return const ProfileFormScreen();
-      },
-    );
-  }
-
-  GoRoute _about() {
-    return GoRoute(
-      path: 'about',
-      builder: (context, state) {
-        return const AboutScreen();
-      },
-    );
-  }
-
-  GoRoute _printerSettings() {
-    return GoRoute(
-      path: 'printer-settings',
-      builder: (context, state) {
-        return const PrinterSettingsScreen();
-      },
-    );
-  }
-
-  GoRoute _addressCreate() {
-    return GoRoute(
-      path: 'address-create',
-      builder: (context, state) {
-        return const AddressFormScreen();
-      },
-    );
-  }
-
-  GoRoute _addressEdit() {
-    return GoRoute(
-      path: 'address-edit/:code',
-      builder: (context, state) {
-        String? code = state.pathParameters["code"] ?? '';
-
-        if (code.isEmpty) {
-          throw 'Required code is not provided!';
-        }
-
-        return AddressFormScreen(code: code);
-      },
-    );
-  }
-
-  GoRoute _categoryCreate() {
-    return GoRoute(
-      path: 'category-create',
-      builder: (context, state) {
-        return const CategoryFormScreen();
-      },
-    );
-  }
-
-  GoRoute _categoryEdit() {
-    return GoRoute(
-      path: 'category-edit/:id',
-      builder: (context, state) {
-        int? id = int.tryParse(state.pathParameters["id"] ?? '');
-
-        if (id == null) {
-          throw 'Required id is not provided!';
-        }
-
-        return CategoryFormScreen(id: id);
-      },
-    );
-  }
-
-  GoRoute _userCreate() {
-    return GoRoute(
-      path: 'user-create',
-      builder: (context, state) {
-        return const UserFormScreen();
-      },
-    );
-  }
-
-  GoRoute _userEdit() {
-    return GoRoute(
-      path: 'user-edit/:id',
-      builder: (context, state) {
-        int? id = int.tryParse(state.pathParameters["id"] ?? '');
-
-        if (id == null) {
-          throw 'Required id is not provided!';
-        }
-
-        return UserFormScreen(id: id);
-      },
-    );
-  }
-
-  GoRoute _purchaseCreate() {
-    return GoRoute(
-      path: 'purchase-create',
-      parentNavigatorKey: navNavigatorKey,
-      builder: (context, state) {
-        return const PurchaseFormScreen();
-      },
-    );
-  }
-
-  GoRoute _purchaseEdit() {
-    return GoRoute(
-      path: 'purchase-edit/:id',
-      builder: (context, state) {
-        int? id = int.tryParse(state.pathParameters["id"] ?? '');
-
-        if (id == null) {
-          throw 'Required purchaseId is not provided!';
-        }
-
-        return PurchaseFormScreen(id: id);
-      },
     );
   }
 }

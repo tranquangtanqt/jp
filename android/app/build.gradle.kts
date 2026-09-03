@@ -5,7 +5,6 @@ plugins {
     id("com.android.application")
     id("kotlin-android")
     id("dev.flutter.flutter-gradle-plugin")
-    id("com.google.gms.google-services")
 }
 
 // val keystoreProperties = Properties()
@@ -15,7 +14,7 @@ plugins {
 // }
 
 android {
-    namespace = "com.elriztechnology.flutter_pos"
+    namespace = "com.nihongo"
     compileSdk = 36
     ndkVersion = "28.2.13676358"
 
@@ -29,10 +28,10 @@ android {
     }
 
     defaultConfig {
-        applicationId = "me_ron.app"
+        applicationId = "com.nihongo"
         minSdk = 24
         targetSdk = 36
-        versionCode = 11
+        versionCode = 1
         versionName = "1.0.0"
         multiDexEnabled = true
     }
@@ -63,7 +62,4 @@ flutter {
 
 dependencies {
     implementation("com.android.support:multidex:2.0.1")
-    implementation(platform("com.google.firebase:firebase-bom:34.12.0"))
-    //implementation(platform("com.google.firebase:firebase-bom:33.16.0"))
-    //implementation("com.google.firebase:firebase-analytics")
 }
